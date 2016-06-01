@@ -668,8 +668,8 @@ class uConf(object):
         self.cflags = [
             '-O2',
             '-I.',
-            '-Werror',
             '-Wall',
+            '-Werror',
             '-D_LARGEFILE_SOURCE',
             '-D_FILE_OFFSET_BITS=64'
         ] + os.environ.get("CFLAGS", "").split() + self.get('cflags', '').split()
