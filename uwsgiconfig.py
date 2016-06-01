@@ -30,9 +30,12 @@ except ImportError:
 
 PY3 = sys.version_info[0] == 3
 
-GCC = os.environ.get('CC', sysconfig.get_config_var('CC'))
-if not GCC:
-    GCC = 'gcc'
+if uwsgi_os == 'Darwin':
+    GCC = os.environ.get('CC', 'clang')
+else:
+    GCC = os.environ.get('CC', sysconfig.get_config_var('CC'))
+    if not GCC:
+        GCC = 'gcc'
 
 def get_preprocessor():
     if 'clang' in GCC:
@@ -173,14 +176,20 @@ def spcall2(cmd):
         return None
 
 
-def test_snippet(snippet):
+def test_snippet(snippet, CFLAGS=[], LDFLAGS=[], LIBS=[]):
     """Compile a C snippet to see if features are available at build / link time."""
-    if not isinstance(snippet, bytes):
-        if PY3:
-            snippet = bytes(snippet, sys.getdefaultencoding())
-        else:
-            snippet = bytes(snippet)
-    cmd = "{} -xc - -o /dev/null".format(GCC)
+    cflags = " ".join(CFLAGS)
+    ldflags = " ".join(LDFLAGS)
+    libs = " ".join(LIBS)
+    if sys.version_info[0] >= 3 or (sys.version_info[0] == 2 and sys.version_info[1] > 5):
+        if not isinstance(snippet, bytes):
+            if PY3:
+                snippet = bytes(snippet, sys.getdefaultencoding())
+            else:
+                snippet = bytes(snippet)
+        cmd = "{0} {1} -xc - {2} {3} -o /dev/null".format(GCC, cflags, ldflags, libs)
+    else:
+        cmd = " ".join([GCC, cflags, "-xc -", ldflags, libs, "-o /dev/null"])
     p = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
     p.communicate(snippet)
     return p.returncode == 0
@@ -343,8 +352,9 @@ def build_uwsgi(uc, print_only=False, gcll=None):
         else:
             last_cflags_ts = os.stat('uwsgibuild.lastcflags')[8]
 
-    with open('uwsgibuild.lastcflags', 'w') as ulc:
-        ulc.write(uwsgi_cflags)
+    ulc = open('uwsgibuild.lastcflags', 'w')
+    ulc.write(uwsgi_cflags)
+    ulc.close()
 
     # embed uwsgi.h in the server binary. It increases the binary size, but will be very useful
     # for various tricks (like cffi integration)
@@ -619,8 +629,9 @@ class uConf(object):
             if last_profile != filename:
                 os.environ['UWSGI_FORCE_REBUILD'] = '1'
 
-        with open('uwsgibuild.lastprofile', 'w') as ulp:
-            ulp.write(filename)
+        ulp = open('uwsgibuild.lastprofile', 'w')
+        ulp.write(filename)
+        ulp.close()
 
         self.config.readfp(open_profile(filename))
         self.gcc_list = [
@@ -835,9 +846,10 @@ class uConf(object):
 
         if uwsgi_os == 'OpenBSD':
             try:
-                obsd_major = int(uwsgi_os_k.split('.')[0])
-                obsd_minor = int(uwsgi_os_k.split('.')[1])
-                if obsd_major >= 5 and obsd_minor > 0:
+                obsd_major = uwsgi_os_k.split('.')[0]
+                obsd_minor = uwsgi_os_k.split('.')[1]
+                obsd_ver = int(obsd_major + obsd_minor)
+                if obsd_ver > 50:
                     self.cflags.append('-DUWSGI_NEW_OPENBSD')
                     report['kernel'] = 'New OpenBSD'
             except Exception:
@@ -1424,7 +1436,7 @@ def build_plugin(path, uc, cflags, ldflags, libs, name=None):
         pass
 
     if uc:
-        plugin_dest = uc.get('plugin_dir') + '/' + name + '_plugin'
+        plugin_dest = uc.get('plugin_build_dir', uc.get('plugin_dir')) + '/' + name + '_plugin'
     else:
         plugin_dest = name + '_plugin'
 

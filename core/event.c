@@ -169,7 +169,7 @@ int event_queue_wait_multi(int eq, int timeout, void *events, int nevents) {
         uwsgi_poll_queue_rebuild(upe);
         int ret = poll(upe->poll, upe->nevents, timeout * 1000);
 	int cnt = 0;
-        if (ret > 0) {
+	if (ret > 0) {
                 int i;
                 for(i=0;i<upe->nevents;i++) {
                         if (upe->poll[i].revents) {
@@ -496,7 +496,6 @@ int event_queue_wait(int eq, int timeout, int *interesting_fd) {
 int event_queue_init() {
 
 	int epfd;
-
 
 	epfd = epoll_create(256);
 
